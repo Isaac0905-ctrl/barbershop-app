@@ -1,6 +1,7 @@
 from sqlalchemy import Column, String, Boolean, Text, DateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
 import uuid
 from app.database import Base
 
@@ -15,3 +16,5 @@ class Barber(Base):
     photo_url     = Column(Text)
     is_active     = Column(Boolean, default=True, nullable=False)
     created_at    = Column(DateTime(timezone=True), server_default=func.now())
+
+    appointments = relationship("Appointment", back_populates="barber")

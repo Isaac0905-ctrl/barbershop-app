@@ -1,5 +1,6 @@
 from sqlalchemy import Column, String, Boolean, Text, Numeric, Integer
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
 import uuid
 from app.database import Base
 
@@ -12,3 +13,5 @@ class Service(Base):
     price        = Column(Numeric(8, 2), nullable=False)
     duration_min = Column(Integer, nullable=False)
     is_active    = Column(Boolean, default=True, nullable=False)
+
+    appointments = relationship("Appointment", back_populates="service")
