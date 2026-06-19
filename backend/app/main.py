@@ -2,12 +2,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine, Base
 import app.models
+from app.routes import services, barbers
 
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="Barbershop API",
-    description="API para gestión de citas de peluquería",
+    description="API para gestión de citas de barbería",
     version="0.1.0"
 )
 
@@ -18,6 +19,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(services.router)
+app.include_router(barbers.router)
 
 @app.get("/health")
 def health_check():
