@@ -1,6 +1,6 @@
 # Barbershop App
 
-Aplicación web para gestión de citas en peluquerías.
+Aplicación web para gestión de citas en Barberías.
 
 ## Funcionalidades
 - Reserva de citas online por parte del cliente
