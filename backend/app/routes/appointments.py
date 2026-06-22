@@ -6,7 +6,7 @@ from app.database import get_db
 from app.models.appointment import Appointment
 from app.models.barber import Barber
 from app.models.service import Service
-from app.schemas.appointment import AppointmentRequest, AppointmentResponse
+from app.schemas.appointment import AppointmentRequest, AppointmentResponse, CancelRequest
 from app.dependencies.auth import require_role
 
 router = APIRouter(prefix="/appointments", tags=["Appointments"])
@@ -66,4 +66,67 @@ def create_appointment(
     db.commit()
     db.refresh(appointment)
 
+    return appointment
+
+@router.get("/my", response_model=list[AppointmentResponse])
+def get_my_appointments(
+    db: Session = Depends(get_db),
+    user = Depends(require_role("client"))
+):
+    appointments = db.query(Appointment).filter(
+        Appointment.client_id == UUID(user["sub"])
+    ).order_by(Appointment.scheduled_at.desc()).all()
+    return appointments
+
+@router.patch("/{appointment_id}/confirm", response_model=AppointmentResponse)
+def confirm_appointment(
+    appointment_id: UUID,
+    db: Session = Depends(get_db),
+    user = Depends(require_role("barber"))
+):
+    appointment = db.query(Appointment).filter(
+        Appointment.id == appointment_id
+    ).first()
+    if not appointment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Cita no encontrada"
+        )
+    if appointment.status != "pending":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"No se puede confirmar una cita en estado '{appointment.status}'"
+        )
+
+    appointment.status = "confirmed"
+    db.commit()
+    db.refresh(appointment)
+    return appointment
+
+@router.patch("/{appointment_id}/cancel", response_model=AppointmentResponse)
+def cancel_appointment(
+    appointment_id: UUID,
+    data: CancelRequest,
+    db: Session = Depends(get_db),
+    user = Depends(require_role("barber", "client"))
+):
+    appointment = db.query(Appointment).filter(
+        Appointment.id == appointment_id
+    ).first()
+    if not appointment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Cita no encontrada"
+        )
+    if appointment.status in ["cancelled", "completed"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"No se puede cancelar una cita en estado '{appointment.status}'"
+        )
+
+    appointment.status = "cancelled"
+    appointment.cancellation_reason = data.reason
+    appointment.cancelled_by = user["role"]
+    db.commit()
+    db.refresh(appointment)
     return appointment
