@@ -65,7 +65,6 @@ def create_appointment(
     db.add(appointment)
     db.commit()
     db.refresh(appointment)
-
     return appointment
 
 @router.get("/my", response_model=list[AppointmentResponse])
@@ -76,6 +75,16 @@ def get_my_appointments(
     appointments = db.query(Appointment).filter(
         Appointment.client_id == UUID(user["sub"])
     ).order_by(Appointment.scheduled_at.desc()).all()
+    return appointments
+
+@router.get("/barber", response_model=list[AppointmentResponse])
+def get_barber_appointments(
+    db: Session = Depends(get_db),
+    user = Depends(require_role("barber"))
+):
+    appointments = db.query(Appointment).filter(
+        Appointment.barber_id == UUID(user["sub"])
+    ).order_by(Appointment.scheduled_at.asc()).all()
     return appointments
 
 @router.patch("/{appointment_id}/confirm", response_model=AppointmentResponse)
@@ -97,7 +106,6 @@ def confirm_appointment(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"No se puede confirmar una cita en estado '{appointment.status}'"
         )
-
     appointment.status = "confirmed"
     db.commit()
     db.refresh(appointment)
@@ -123,7 +131,6 @@ def cancel_appointment(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"No se puede cancelar una cita en estado '{appointment.status}'"
         )
-
     appointment.status = "cancelled"
     appointment.cancellation_reason = data.reason
     appointment.cancelled_by = user["role"]
