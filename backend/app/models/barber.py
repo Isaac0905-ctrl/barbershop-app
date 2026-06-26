@@ -18,3 +18,5 @@ class Barber(Base):
     created_at    = Column(DateTime(timezone=True), server_default=func.now())
 
     appointments = relationship("Appointment", back_populates="barber")
+    schedules    = relationship("BarberSchedule", back_populates="barber", cascade="all, delete-orphan")
+    time_off     = relationship("BarberTimeOff", back_populates="barber", cascade="all, delete-orphan")
