@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 from uuid import UUID
@@ -6,14 +6,20 @@ from app.database import get_db
 from app.models.appointment import Appointment
 from app.models.barber import Barber
 from app.models.service import Service
+from app.models.client import Client
 from app.schemas.appointment import AppointmentRequest, AppointmentResponse, CancelRequest
 from app.dependencies.auth import require_role
+from app.utils.email import send_new_appointment_email, send_confirmation_email, send_cancellation_email
 
 router = APIRouter(prefix="/appointments", tags=["Appointments"])
 
+def format_datetime(dt):
+    return dt.strftime("%A %d de %B de %Y a las %H:%M")
+
 @router.post("/", response_model=AppointmentResponse)
-def create_appointment(
+async def create_appointment(
     data: AppointmentRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     user = Depends(require_role("client"))
 ):
@@ -54,6 +60,8 @@ def create_appointment(
             detail="El barbero ya tiene una cita en ese horario"
         )
 
+    client = db.query(Client).filter(Client.id == UUID(user["sub"])).first()
+
     appointment = Appointment(
         barber_id=data.barber_id,
         service_id=data.service_id,
@@ -65,6 +73,16 @@ def create_appointment(
     db.add(appointment)
     db.commit()
     db.refresh(appointment)
+
+    background_tasks.add_task(
+        send_new_appointment_email,
+        barber.email,
+        barber.name,
+        client.full_name,
+        service.name,
+        format_datetime(appointment.scheduled_at)
+    )
+
     return appointment
 
 @router.get("/my", response_model=list[AppointmentResponse])
@@ -88,8 +106,9 @@ def get_barber_appointments(
     return appointments
 
 @router.patch("/{appointment_id}/confirm", response_model=AppointmentResponse)
-def confirm_appointment(
+async def confirm_appointment(
     appointment_id: UUID,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     user = Depends(require_role("barber"))
 ):
@@ -106,15 +125,31 @@ def confirm_appointment(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"No se puede confirmar una cita en estado '{appointment.status}'"
         )
+
+    barber = db.query(Barber).filter(Barber.id == appointment.barber_id).first()
+    service = db.query(Service).filter(Service.id == appointment.service_id).first()
+    client = db.query(Client).filter(Client.id == appointment.client_id).first()
+
     appointment.status = "confirmed"
     db.commit()
     db.refresh(appointment)
+
+    background_tasks.add_task(
+        send_confirmation_email,
+        client.email,
+        client.full_name,
+        service.name,
+        barber.name,
+        format_datetime(appointment.scheduled_at)
+    )
+
     return appointment
 
 @router.patch("/{appointment_id}/cancel", response_model=AppointmentResponse)
-def cancel_appointment(
+async def cancel_appointment(
     appointment_id: UUID,
     data: CancelRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     user = Depends(require_role("barber", "client"))
 ):
@@ -131,9 +166,26 @@ def cancel_appointment(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"No se puede cancelar una cita en estado '{appointment.status}'"
         )
+
+    barber = db.query(Barber).filter(Barber.id == appointment.barber_id).first()
+    service = db.query(Service).filter(Service.id == appointment.service_id).first()
+    client = db.query(Client).filter(Client.id == appointment.client_id).first()
+
     appointment.status = "cancelled"
     appointment.cancellation_reason = data.reason
     appointment.cancelled_by = user["role"]
     db.commit()
     db.refresh(appointment)
+
+    if user["role"] == "barber":
+        background_tasks.add_task(
+            send_cancellation_email,
+            client.email,
+            client.full_name,
+            service.name,
+            barber.name,
+            format_datetime(appointment.scheduled_at),
+            data.reason
+        )
+
     return appointment

@@ -1,3 +1,4 @@
+aiosmtplib==5.1.2
 annotated-doc==0.0.4
 annotated-types==0.7.0
 anyio==4.14.0
@@ -9,6 +10,8 @@ fastapi==0.137.2
 greenlet==3.5.2
 h11==0.16.0
 idna==3.18
+Jinja2==3.1.6
+MarkupSafe==3.0.3
 passlib==1.7.4
 psycopg2-binary==2.9.12
 pydantic==2.13.4
